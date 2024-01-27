@@ -1,0 +1,107 @@
+version: "3"
+
+# https://strapi.io/documentation/developer-docs/latest/setup-deployment-guides/deployment/hosting-guides/docker.html#_1-create-a-docker-composeyml-file
+services:
+  strapi:
+    container_name: strapi
+    build: .
+    image: strapi:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_CLIENT: ${DATABASE_CLIENT}
+      DATABASE_HOST: strapi-database
+      DATABASE_PORT: ${DATABASE_PORT}
+      DATABASE_NAME: ${DATABASE_NAME}
+      DATABASE_USERNAME: ${DATABASE_USERNAME}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_JWT_SECRET: ${ADMIN_JWT_SECRET}
+      APP_KEYS: ${APP_KEYS}
+      NODE_ENV: ${NODE_ENV}
+    volumes:
+      - ./config:/opt/app/config
+      - ./src:/opt/app/src
+      - ./package.json:/opt/package.json
+      - ./yarn.lock:/opt/yarn.lock
+      - ./.env:/opt/app/.env
+      - ./public/uploads:/opt/app/public/uploads
+    ports:
+      - "1337:1337"
+    networks:
+      - strapi
+    depends_on:
+      - strapi-database
+# configuration du déploiement
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+        reservations:
+          memory: 512M
+#    deploy:
+#     replicas: 3  # Nombre d'instances souhaitées
+#      resources:
+#        limits:
+#          cpus: "2"  # Limite de CPU par instance
+#          memory: 512M  # Limite de mémoire par instance
+#      placement:
+#        constraints:
+#          - node.role == worker  # Contrainte pour déployer uniquement sur des nœuds ouvriers
+        # commande de déploiement
+        # docker stack deploy -c docker-compose.yml mystack
+        # commande de mise à jour
+        # docker stack deploy -c docker-compose.yml mystack
+        # commande de suppression
+        # docker stack rm mystack
+
+  strapi-database:
+    container_name: strapi_database
+    platform: linux/amd64  # for platform error on Apple M1 chips
+    restart: unless-stopped
+    env_file: .env
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      - strapi-data:/var/lib/postgresql/data/
+    ports:
+      - "5433:5432"
+    networks:
+      - strapi
+
+
+  prometheus:
+      image: prom/prometheus
+      volumes:
+        - ./prometheus-2.49.1.windows-amd64:/etc/prometheus
+      command:
+        - "--config.file=/etc/prometheus/prometheus.yml"
+      ports:
+        - '9090:9090'
+      networks:
+        - strapi
+      depends_on:
+        - strapi
+
+  grafana:
+    image: grafana/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - '3001:3000'
+    depends_on:
+      - prometheus
+    networks:
+      - strapi
+
+volumes:
+  strapi-data:
+
+networks:
+  strapi:
+    name: strapi
+    driver: bridge
